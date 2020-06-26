@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, brew]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '10 1/2 * * *'
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Brew cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/Library/Caches/Homebrew
+        key: ${{ runner.os }}
+    - name: Get GDK prepare doc
+      run: |
+        curl -sSL -O https://gitlab.com/gitlab-org/gitlab-development-kit/-/raw/b16811a4596640adbd6ffd21ba85668568b98b62/doc/prepare.md
+    - name: Extract code
+      run: |
+        sed -i -e '1,/^#* macOS/d; /^#* .*MacPorts/,$d' prepare.md
+        sed -i -e '1,/^```shell/d; /```/,$d' prepare.md
+        sed -i -e 's/brew cask install/brew install --cask /' prepare.md # 2021-05-28
+
+    - name: Execute prepare code
+      run: |
+        bash -x prepare.md
+    #- name: Install rbenv
+    #  run: |
+    #    brew install rbenv
+    #- name: Initialize rbenv
+    #  run: |
+    #    eval "$(rbenv init -)"
+    #    curl -fsSL https://github.com/rbenv/rbenv-installer/raw/master/bin/rbenv-doctor | bash
+    #- name: Install Ruby
+    #  run: |
+    #    eval "$(rbenv init -)"
+    #    rbenv install $(curl -fsSL https://gitlab.com/gitlab-org/gitlab/-/raw/master/.ruby-version)
+    - uses: actions/setup-ruby@v1
+      with:
+        ruby-version: '2.6'
+    - name: Install Bundler 1.17.3
+      run: |
+        gem install bundler -v '= 1.17.3'
+    - name: Install gitlab-development-kit
+      run: |
+        gem install -N gitlab-development-kit -v 0.2.10 # 2021-05-28
+    - name: Initialize gdk init
+      run: |
+        # eval "$(rbenv init -)"
+        gdk init gdk
+    - name: Run PG
+      run: |
+        brew services start postgresql@11
+    - name: Retrieve gitlab code
+      run: |
+        cd gdk && gdk install shallow_clone=true || true
+        ps aux
+    - name: Reconfigure gdk
+      run: |
+        cd gdk && gdk reconfigure
